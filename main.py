@@ -76,6 +76,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer3_out_channel_combined = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, padding="same",
                                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     mixed2 = tf.add(up_sample2, vgg_layer3_out_channel_combined)
+    mixed2 = tf.nn.dropout(mixed2, 0.75)
 
     out = tf.layers.conv2d_transpose(mixed2, num_classes, 16, 8, padding='same',
                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
@@ -120,12 +121,17 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    keep_probability = 1
+    keep_probability = 0.75
     lr = 0.001
+    counter = 0
     for epoch in range(epochs):
         for image, label in get_batches_fn(batch_size):
-             sess.run(train_op, feed_dict={input_image: image, correct_label: label, keep_prob: keep_probability,
+            sess.run(train_op, feed_dict={input_image: image, correct_label: label, keep_prob: keep_probability,
                                            learning_rate: lr})
+            if counter % 1000 == 0:
+                print(sess.run(cross_entropy_loss, feed_dict={input_image: image, correct_label: label, keep_prob:
+                    keep_probability, learning_rate: lr}))
+            counter += 1
 
 
 
@@ -141,7 +147,7 @@ def run():
     tests.test_for_kitti_dataset(data_dir)
 
     # Download pretrained vgg model
-    helper.maybe_download_pretrained_vgg(data_dir)
+    # helper.maybe_download_pretrained_vgg(data_dir)
 
     # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
     # You'll need a GPU with at least 10 teraFLOPS to train on.
@@ -159,12 +165,13 @@ def run():
         # TODO: Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out = load_vgg(sess, vgg_path)
         nn_last_layer = layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes)
-        logits, train_op, cross_entropy_loss = optimize(nn_last_layer)
 
         # TODO: Train NN using the train_nn function
         learning_rate = tf.placeholder(tf.float32, shape=(), name="learning_rate")
         correct_label = tf.placeholder(tf.float32, shape=(None, None, None, 2), name="label")
-        train_nn(sess, epochs=5, batch_size=8, get_batches_fn=get_batches_fn, train_op=train_op, cross_entropy_loss=
+        logits, train_op, cross_entropy_loss = optimize(nn_last_layer, correct_label, learning_rate, num_classes)
+        sess.run(tf.global_variables_initializer())
+        train_nn(sess, epochs=50, batch_size=8, get_batches_fn=get_batches_fn, train_op=train_op, cross_entropy_loss=
                  cross_entropy_loss, input_image=input_image, correct_label=correct_label, keep_prob=keep_prob,
                  learning_rate=learning_rate)
 
